@@ -17,6 +17,7 @@ PROJECT_ROOT = Path(__file__).parent.parent
 sys.path.insert(0, str(PROJECT_ROOT))
 
 from research.llm_integration import LLMClient
+from data.collectors.alpha_pai import AlphaPaiCollector
 
 DOCS_DIR = PROJECT_ROOT / "docs"
 FRAMEWORK_FILE = DOCS_DIR / "research_framework.md"
@@ -100,17 +101,38 @@ def add_trade_case(
 
 async def ai_update_framework(topic: str, new_evidence: str):
     """
-    使用 LLM 辅助更新框架
+    使用 LLM + Alpha 派辅助更新框架
+    - 先用 Alpha 派 recall 获取该领域的最新投研数据
+    - 再用 LLM 综合现有框架 + 新证据 + Alpha 派数据，生成更新建议
     """
-    client = LLMClient()
     
-    # 读取现有框架
+    # 1. Alpha 派数据摄入（recall 模式，省积分）
+    print(f"正在通过 Alpha 派 recall 获取 '{topic}' 相关投研数据...")
+    collector = AlphaPaiCollector()
+    try:
+        alpha_data = collector.get_fundamental_data(
+            keywords=[topic],
+            doc_types=["report", "roadShow", "comment"],
+            days_back=30,
+        )
+        print(f"Alpha 派数据获取完成，共 {len(alpha_data.split(chr(10)))} 行")
+    except Exception as e:
+        print(f"Alpha 派数据获取失败: {e}")
+        alpha_data = ""
+    
+    # 2. 读取现有框架
     with open(FRAMEWORK_FILE, "r", encoding="utf-8") as f:
         current_framework = f.read()
+    
+    # 3. LLM 综合更新
+    client = LLMClient()
     
     prompt = f"""你是一位资深的投研框架维护者。当前框架如下：
 
 {current_framework[:3000]}...
+
+【Alpha 派投研数据（recall 原始数据）】
+{alpha_data[:2000]}
 
 【新的证据/发现】
 主题: {topic}
@@ -120,6 +142,7 @@ async def ai_update_framework(topic: str, new_evidence: str):
 1. 现有框架中需要修正或补充的部分
 2. 建议添加的新认知
 3. 更新后的相关章节内容（markdown 格式）
+4. 基于 Alpha 派数据，有哪些新的研究线索值得深入？
 
 只输出需要修改的部分，不需要重复整个框架。"""
     
@@ -129,14 +152,29 @@ async def ai_update_framework(topic: str, new_evidence: str):
     )
     
     print("\n" + "=" * 60)
-    print("LLM 建议的框架更新")
+    print("LLM + Alpha 派 建议的框架更新")
     print("=" * 60)
     print(response.content)
+    
+    # 4. Alpha 派专家验证（可选，讨论更新建议是否合理）
+    print("\n" + "-" * 60)
+    print("Alpha 派投研顾问验证...")
+    try:
+        validation = collector.expert_discuss(
+            f"以下是对投研框架的更新建议，请从专业投研角度验证其合理性，指出潜在漏洞或过度推断：\n{response.content[:1500]}",
+            "",
+        )
+        print("Alpha 派验证意见:")
+        print(validation)
+    except Exception as e:
+        print(f"Alpha 派验证失败: {e}")
     
     # 保存建议
     suggestion_file = DOCS_DIR / f"framework_suggestion_{datetime.now().strftime('%Y%m%d_%H%M')}.md"
     with open(suggestion_file, "w", encoding="utf-8") as f:
         f.write(response.content)
+    
+    await client.close()
     
     print(f"\n建议已保存: {suggestion_file}")
     await client.close()

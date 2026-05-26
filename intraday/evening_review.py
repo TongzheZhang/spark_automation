@@ -17,6 +17,7 @@ from typing import List
 sys.path.insert(0, str(Path(__file__).parent.parent))
 
 from research.llm_integration import LLMClient
+from data.collectors.alpha_pai import AlphaPaiCollector
 from intraday.record import load_signals, load_trades, save_review
 from intraday.models import DailyReview, TradeStatus
 
@@ -45,6 +46,10 @@ async def run_evening_review(date: str = None):
     # LLM 深度复盘
     if trades:
         review.review_summary = await _llm_review(trades, signals)
+        # Alpha 派专家讨论（作为投研顾问，讨论优化点）
+        alpha_pai_discussion = await _alpha_pai_expert_review(trades)
+        if alpha_pai_discussion:
+            review.review_summary += f"\n\n---\n\n【Alpha 派投研顾问讨论】\n{alpha_pai_discussion}"
     else:
         review.review_summary = "今日无交易，无复盘内容。"
     

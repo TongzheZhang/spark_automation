@@ -77,9 +77,12 @@ class AlphaPaiCollector:
     def health_check(self) -> bool:
         """健康检查"""
         try:
-            result = self._run_cli(["hello"], capture_json=True)
-            logger.info(f"Alpha 派健康检查: {result}")
-            return True
+            result = self._run_cli(["hello"], capture_json=False)
+            if "hello" in result.get("raw_output", "") or "success" in result.get("raw_output", ""):
+                logger.info(f"Alpha 派健康检查通过")
+                return True
+            logger.warning(f"Alpha 派健康检查异常: {result}")
+            return False
         except Exception as e:
             logger.error(f"Alpha 派健康检查失败: {e}")
             return False
@@ -229,6 +232,94 @@ class AlphaPaiCollector:
         """
         data = self._run_cli(["watchlist"])
         return data.get("groups", [])
+    
+    def get_fundamental_data(
+        self,
+        keywords: List[str],
+        doc_types: Optional[List[str]] = None,
+        start_date: Optional[str] = None,
+        days_back: int = 30,
+    ) -> str:
+        """
+        通过 recall 获取品种基本面原始数据，整理为文本摘要
+        建议使用 recall（省积分），不经过大模型加工，直接返回原始数据
+        """
+        if doc_types is None:
+            doc_types = ["report", "roadShow", "comment", "ann"]
+        
+        if not start_date:
+            from datetime import datetime, timedelta
+            start_date = (datetime.now() - timedelta(days=days_back)).strftime("%Y-%m-%d")
+        
+        query = " ".join(keywords[:3])
+        try:
+            result = self.recall(
+                query=query,
+                doc_types=doc_types,
+                start_date=start_date,
+            )
+            
+            if not result.documents:
+                return "暂无相关数据"
+            
+            lines = []
+            for i, doc in enumerate(result.documents[:5], 1):
+                title = doc.get("title", "")
+                content = doc.get("content", "")[:200]
+                doc_type = doc.get("recallType", "")
+                pub_date = doc.get("publishDate", "")
+                lines.append(f"[{i}] [{doc_type}] {title} ({pub_date})")
+                if content:
+                    lines.append(f"    {content}")
+            
+            return "\n".join(lines)
+        
+        except Exception as e:
+            logger.error(f"Alpha 派基本面数据获取失败: {e}")
+            return "数据获取失败"
+    
+    def expert_discuss(
+        self,
+        topic: str,
+        context: str = "",
+    ) -> str:
+        """
+        以专家身份进行讨论（智能问答模式）
+        适用于复盘讨论、策略优化等深度分析场景
+        """
+        question = topic
+        if context:
+            question = f"{context}\n\n问题: {topic}"
+        
+        try:
+            result = self.qa(
+                question=question,
+                mode="Think",
+                start_date=(datetime.now() - timedelta(days=30)).strftime("%Y-%m-%d"),
+            )
+            return result.answer
+        except Exception as e:
+            logger.error(f"Alpha 派专家讨论失败: {e}")
+            return "讨论失败"
+    
+    def industry_one_page(self, industry: str) -> str:
+        """行业一页纸（mode 11）"""
+        try:
+            return self.agent_industry_one_page(industry)
+        except Exception as e:
+            logger.error(f"行业分析失败: {e}")
+            return ""
+    
+    def agent_industry_one_page(self, industry: str) -> str:
+        """Agent mode 11 - 行业一页纸"""
+        args = [
+            "agent",
+            "--mode", "11",
+            "--question", f"{industry}的行业一页纸",
+            "--industry", industry,
+        ]
+        result = self._run_cli(args, capture_json=False)
+        return result.get("raw_output", "")
 
 
 # 便捷函数

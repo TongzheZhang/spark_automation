@@ -10,6 +10,7 @@ from datetime import datetime
 
 from data.collectors.brave_search import BraveSearchCollector
 from data.collectors.market_data import MarketDataCollector, MarketSnapshot
+from data.collectors.alpha_pai import AlphaPaiCollector
 from research.llm_integration import LLMClient, extract_json_from_text
 from intraday.models import IntradaySignal, Direction, MarketSnapshotData, CONTRACT_SIZE
 
@@ -81,6 +82,7 @@ class IntradayStrategy:
     def __init__(self):
         self.brave = BraveSearchCollector()
         self.market = MarketDataCollector()
+        self.alpha_pai = AlphaPaiCollector()
         self.llm: Optional[LLMClient] = None
     
     async def _get_llm(self) -> LLMClient:
@@ -106,13 +108,17 @@ class IntradayStrategy:
         # 3. 搜索外盘/关联市场
         related_market = await self._fetch_related_market(name, commodity)
         
-        # 4. LLM 判断
+        # 4. Alpha 派基本面数据（recall 模式，省积分）
+        alpha_pai_data = await self._fetch_alpha_pai_fundamental(name, commodity)
+        
+        # 5. LLM 判断
         signal = await self._llm_judge(
             commodity=commodity,
             name=name,
             snapshot=snapshot,
             overnight_news=overnight_news,
             related_market=related_market,
+            alpha_pai_data=alpha_pai_data,
         )
         
         signal.market_snapshot = MarketSnapshotData(
@@ -180,6 +186,37 @@ class IntradayStrategy:
             logger.error(f"搜索外盘失败 {code}: {e}")
             return "外盘信息获取失败"
     
+    async def _fetch_alpha_pai_fundamental(self, name: str, code: str) -> str:
+        """通过 Alpha 派 recall 获取品种基本面数据"""
+        try:
+            keywords_map = {
+                "RB": ["螺纹钢", "钢铁", "库存", "供需"],
+                "I": ["铁矿石", "进口矿", "矿山"],
+                "CU": ["铜", "铜矿", "冶炼", "LME铜"],
+                "M": ["豆粕", "大豆", "压榨", "库存"],
+                "C": ["玉米", "临储", "饲用"],
+                "SC": ["原油", "OPEC", "原油库存"],
+                "AL": ["铝", "电解铝", "氧化铝"],
+                "AU": ["黄金", "美联储", "实际利率"],
+            }
+            keywords = keywords_map.get(code, [name])
+            
+            # 使用 run_in_executor 包装同步的 Alpha 派调用
+            import asyncio
+            loop = asyncio.get_event_loop()
+            data = await loop.run_in_executor(
+                None,
+                self.alpha_pai.get_fundamental_data,
+                keywords,
+                ["report", "roadShow", "comment"],
+                None,
+                14,  # 最近14天
+            )
+            return data
+        except Exception as e:
+            logger.error(f"Alpha 派数据获取失败 {code}: {e}")
+            return "Alpha 派数据获取失败"
+    
     async def _llm_judge(
         self,
         commodity: str,
@@ -187,6 +224,7 @@ class IntradayStrategy:
         snapshot: MarketSnapshot,
         overnight_news: str,
         related_market: str,
+        alpha_pai_data: str = "",
     ) -> IntradaySignal:
         """LLM 综合判断日内方向"""
         
@@ -230,6 +268,9 @@ class IntradayStrategy:
 
 【关联市场/外盘】
 {related_market}
+
+【Alpha 派投研数据（recall 原始数据）】
+{alpha_pai_data}
 
 【交易规则】
 - 每手最小变动价值约 {tick_value} 元

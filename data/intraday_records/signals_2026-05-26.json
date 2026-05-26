@@ -1,0 +1,34 @@
+[
+  {
+    "date": "2026-05-26",
+    "commodity": "RB",
+    "commodity_name": "螺纹钢",
+    "direction": "SHORT",
+    "entry_price": 3186.0,
+    "confidence": 7,
+    "stop_loss_price": 3160.0,
+    "target_price": 3100.0,
+    "core_logic": "价跌+持仓增+成交放，空头主动开仓，下行有动能",
+    "overnight_news": "无重大隔夜新闻",
+    "market_snapshot": {
+      "commodity": "RB",
+      "name": "螺纹钢连续",
+      "time": "150000",
+      "open": 3218.0,
+      "high": 3218.0,
+      "low": 3138.0,
+      "last": 3186.0,
+      "prev_settle": 3213.0,
+      "settle": 3167.0,
+      "bid": 3146.0,
+      "ask": 3147.0,
+      "open_interest": 1733217.0,
+      "volume": 1515821.0,
+      "date": "2026-05-26",
+      "gap_pct": 0.16,
+      "change_pct": -2.09,
+      "amplitude_pct": 2.49
+    },
+    "generated_at": "2026-05-26T17:26:15.236629"
+  }
+]
