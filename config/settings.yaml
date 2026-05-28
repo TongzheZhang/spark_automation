@@ -136,6 +136,9 @@ monitored_commodities:
     - code: "SP"
       name: "纸浆"
       exchange: "SHFE"
+    - code: "FU"
+      name: "燃料油"
+      exchange: "SHFE"
   # 农产品
   agriculture:
     - code: "M"
@@ -180,6 +183,18 @@ monitored_commodities:
     - code: "CJ"
       name: "红枣"
       exchange: "ZCE"
+    - code: "A"
+      name: "豆一"
+      exchange: "DCE"
+    - code: "B"
+      name: "豆二"
+      exchange: "DCE"
+    - code: "CY"
+      name: "棉纱"
+      exchange: "ZCE"
+    - code: "RR"
+      name: "粳米"
+      exchange: "DCE"
   # 铁合金
   ferroalloy:
     - code: "SM"
@@ -196,6 +211,26 @@ monitored_commodities:
     - code: "LC"
       name: "碳酸锂"
       exchange: "GFEX"
+  # 金融期货
+  financial:
+    - code: "IF"
+      name: "沪深300股指"
+      exchange: "CFFEX"
+    - code: "IC"
+      name: "中证500股指"
+      exchange: "CFFEX"
+    - code: "IH"
+      name: "上证50股指"
+      exchange: "CFFEX"
+    - code: "IM"
+      name: "中证1000股指"
+      exchange: "CFFEX"
+    - code: "T"
+      name: "10年期国债"
+      exchange: "CFFEX"
+    - code: "TL"
+      name: "30年期国债"
+      exchange: "CFFEX"
 # 政策数据源配置
 policy_sources:
   # 国务院
@@ -264,7 +299,7 @@ intraday:
   review_time: "19:00"          # 复盘时间
   min_confidence: 7             # 最低置信度（0-10）
   max_trades_per_day: 3         # 每日最大交易次数
-  default_focus: ['AG', 'AL', 'AO', 'AP', 'AU', 'BC', 'BR', 'BU', 'C', 'CF', 'CJ', 'CS', 'CU', 'EB', 'EG', 'FG', 'HC', 'I', 'J', 'JD', 'JM', 'L', 'LC', 'LH', 'LU', 'M', 'MA', 'NI', 'NR', 'OI', 'P', 'PB', 'PF', 'PG', 'PK', 'PP', 'PX', 'RB', 'RM', 'RU', 'SA', 'SC', 'SF', 'SH', 'SI', 'SM', 'SN', 'SP', 'SR', 'SS', 'TA', 'UR', 'V', 'Y', 'ZN']  # 默认扫描品种
+  default_focus: ['A', 'AG', 'AL', 'AO', 'AP', 'AU', 'B', 'BC', 'BR', 'BU', 'C', 'CF', 'CJ', 'CS', 'CU', 'CY', 'EB', 'EG', 'FG', 'FU', 'HC', 'I', 'IC', 'IF', 'IH', 'IM', 'J', 'JD', 'JM', 'L', 'LC', 'LH', 'LU', 'M', 'MA', 'NI', 'NR', 'OI', 'P', 'PB', 'PF', 'PG', 'PK', 'PP', 'PX', 'RB', 'RM', 'RR', 'RU', 'SA', 'SC', 'SF', 'SH', 'SI', 'SM', 'SN', 'SP', 'SR', 'SS', 'T', 'TA', 'TL', 'UR', 'V', 'Y', 'ZN']  # 默认扫描品种
   trading_days: ["monday", "tuesday", "wednesday", "thursday", "friday"]
 
 # 行情数据源

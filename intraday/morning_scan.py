@@ -38,38 +38,68 @@ logging.basicConfig(
 logger = logging.getLogger("morning_scan")
 
 
-def load_commodities(config_path: str = "config/settings.yaml") -> List[Dict[str, str]]:
-    """加载监控品种列表"""
+def load_commodities(
+    config_path: str = "config/settings.yaml",
+    exchange_filter: str = None,
+) -> List[Dict[str, str]]:
+    """加载监控品种列表，可按交易所过滤"""
     with open(config_path, "r", encoding="utf-8") as f:
         cfg = yaml.safe_load(f)
     
     commodities = []
     for group, items in cfg.get("monitored_commodities", {}).items():
         for item in items:
-            commodities.append({"code": item["code"], "name": item["name"]})
+            # 按交易所过滤
+            if exchange_filter and item.get("exchange", "") != exchange_filter:
+                continue
+            commodities.append({
+                "code": item["code"],
+                "name": item["name"],
+                "exchange": item.get("exchange", ""),
+            })
     return commodities
 
 
 async def run_morning_scan(
     focused: List[str] = None,
     config_path: str = "config/settings.yaml",
+    exchange_filter: str = None,
+    scan_label: str = "09:05 开盘扫描",
 ):
-    """执行开盘扫描"""
+    """执行开盘扫描
+    
+    Args:
+        focused: 指定品种列表，None 使用默认
+        config_path: 配置文件路径
+        exchange_filter: 按交易所过滤，None=所有, 'CFFEX'=金融期货, 非'CFFEX'=商品期货
+        scan_label: 扫描标签（用于日志和报告）
+    """
     date_str = datetime.now().strftime("%Y-%m-%d")
     logger.info("=" * 60)
-    logger.info(f"[{date_str}] 09:05 开盘扫描开始")
-    logger.info(f"策略时间窗口: 09:05 开仓 → 14:55 平仓")
-    logger.info("=" * 60)
+    logger.info(f"[{date_str}] {scan_label}")
+    
+    # 根据交易所自适应时间窗口
+    if exchange_filter == "CFFEX":
+        entry_time = "09:35"
+        exit_time = "14:55"
+        logger.info(f"金融期货时间窗口: {entry_time} 开仓 → {exit_time} 平仓")
+    else:
+        entry_time = "09:05"
+        exit_time = "14:55"
+        logger.info(f"商品期货时间窗口: {entry_time} 开仓 → {exit_time} 平仓")
     
     strategy = IntradayStrategy()
     
     try:
         # 加载品种
-        all_commodities = load_commodities(config_path)
+        all_commodities = load_commodities(config_path, exchange_filter=exchange_filter)
         if focused:
             commodities = [c for c in all_commodities if c["code"] in focused]
+        elif exchange_filter == "CFFEX":
+            # 金融期货默认全扫
+            commodities = all_commodities
         else:
-            # 默认只扫描流动性好的品种
+            # 商品期货默认只扫描流动性好的品种
             default_codes = {"RB", "M", "CU", "I", "SC", "AL", "AU"}
             commodities = [c for c in all_commodities if c["code"] in default_codes]
         
@@ -79,6 +109,8 @@ async def run_morning_scan(
         signals = await strategy.scan_all(commodities)
         
         # 用 AKShare 分钟线校正精确入场价
+        # 金融期货在 09:30 开盘，入场时间为 09:35（等5分钟稳定）
+        # 商品期货在 09:00 开盘，入场时间为 09:05
         minute_collector = MinuteDataCollector()
         for sig in signals:
             if not sig.should_trade():
@@ -93,11 +125,11 @@ async def run_morning_scan(
                 diff = round(precise_entry - old_entry, 2)
                 open_diff = round(precise_entry - open_price, 2) if open_price is not None else None
                 logger.info(
-                    f"[{sig.commodity}] 09:05精确价校正: {old_entry} -> {precise_entry} "
-                    f"(与信号差异:{diff:+}, 与09:00开盘差异:{open_diff:+})"
+                    f"[{sig.commodity}] {entry_time}精确价校正: {old_entry} -> {precise_entry} "
+                    f"(与信号差异:{diff:+}, 与开盘差异:{open_diff:+})"
                 )
             else:
-                logger.warning(f"[{sig.commodity}] 无法获取09:05分钟线，保留信号原始入场价")
+                logger.warning(f"[{sig.commodity}] 无法获取{entry_time}分钟线，保留信号原始入场价")
         
         # 保存信号
         all_signals = []
@@ -109,9 +141,9 @@ async def run_morning_scan(
         
         # 生成报告
         report_lines = [
-            f"# 日内交易信号 ({date_str} 09:05)",
+            f"# {scan_label} ({date_str})",
             "",
-            f"**策略时间窗口**: 09:05 开仓 → 14:55 平仓",
+            f"**策略时间窗口**: {entry_time} 开仓 → {exit_time} 平仓",
             "",
             f"扫描品种数: {len(commodities)}",
             f"有效信号数: {len(signals)}",
@@ -171,6 +203,15 @@ if __name__ == "__main__":
     import argparse
     parser = argparse.ArgumentParser()
     parser.add_argument("--focus", nargs="+", help="聚焦品种")
+    parser.add_argument("--exchange", "-e", help="交易所过滤 (CFFEX 等)")
+    parser.add_argument("--label", help="扫描标签")
     args = parser.parse_args()
     
-    asyncio.run(run_morning_scan(focused=args.focus))
+    exchange_label = args.label or (
+        "09:35 金融期货扫描" if args.exchange == "CFFEX" else "09:05 商品期货扫描"
+    )
+    asyncio.run(run_morning_scan(
+        focused=args.focus,
+        exchange_filter=args.exchange,
+        scan_label=exchange_label,
+    ))

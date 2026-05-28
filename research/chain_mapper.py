@@ -100,6 +100,89 @@ COMMODITY_CHAINS = {
             {"from": "aluminum_semis", "to": "transportation", "relation": "需求"},
         ],
     },
+    "precious": {
+        "name": "贵金属产业链",
+        "nodes": {
+            "gold_mine": {"name": "金矿", "commodities": []},
+            "silver_mine": {"name": "银矿", "commodities": []},
+            "refining": {"name": "精炼", "commodities": ["AU", "AG"]},
+            "jewelry": {"name": "首饰", "commodities": []},
+            "investment": {"name": "投资", "commodities": []},
+            "industrial": {"name": "工业应用", "commodities": []},
+        },
+        "edges": [
+            {"from": "gold_mine", "to": "refining", "relation": "采矿"},
+            {"from": "silver_mine", "to": "refining", "relation": "采矿"},
+            {"from": "refining", "to": "jewelry", "relation": "下游需求"},
+            {"from": "refining", "to": "investment", "relation": "下游需求"},
+            {"from": "refining", "to": "industrial", "relation": "下游需求"},
+        ],
+    },
+    "agriculture_cotton": {
+        "name": "棉花-纺织产业链",
+        "nodes": {
+            "cotton": {"name": "棉花", "commodities": ["CF"]},
+            "yarn": {"name": "棉纱", "commodities": []},
+            "fabric": {"name": "坯布", "commodities": []},
+            "garment": {"name": "服装", "commodities": []},
+            "export": {"name": "出口", "commodities": []},
+        },
+        "edges": [
+            {"from": "cotton", "to": "yarn", "relation": "原料"},
+            {"from": "yarn", "to": "fabric", "relation": "原料"},
+            {"from": "fabric", "to": "garment", "relation": "原料"},
+            {"from": "garment", "to": "export", "relation": "销售"},
+        ],
+    },
+    "agriculture_sugar": {
+        "name": "糖产业链",
+        "nodes": {
+            "sugar_cane": {"name": "甘蔗/甜菜", "commodities": []},
+            "raw_sugar": {"name": "原糖", "commodities": []},
+            "refined_sugar": {"name": "白糖", "commodities": ["SR"]},
+            "food_beverage": {"name": "食品饮料", "commodities": []},
+            "biofuel": {"name": "生物燃料", "commodities": []},
+        },
+        "edges": [
+            {"from": "sugar_cane", "to": "raw_sugar", "relation": "压榨"},
+            {"from": "raw_sugar", "to": "refined_sugar", "relation": "精炼"},
+            {"from": "refined_sugar", "to": "food_beverage", "relation": "需求"},
+            {"from": "refined_sugar", "to": "biofuel", "relation": "需求"},
+        ],
+    },
+    "new_energy": {
+        "name": "新能源产业链",
+        "nodes": {
+            "silicon": {"name": "工业硅", "commodities": ["SI"]},
+            "lithium": {"name": "碳酸锂", "commodities": ["LC"]},
+            "cathode": {"name": "正极材料", "commodities": []},
+            "battery": {"name": "动力电池", "commodities": []},
+            "ev": {"name": "新能源汽车", "commodities": []},
+            "solar": {"name": "光伏", "commodities": []},
+        },
+        "edges": [
+            {"from": "silicon", "to": "solar", "relation": "下游需求"},
+            {"from": "lithium", "to": "cathode", "relation": "原料"},
+            {"from": "cathode", "to": "battery", "relation": "原料"},
+            {"from": "battery", "to": "ev", "relation": "需求"},
+        ],
+    },
+    "ferroalloy": {
+        "name": "铁合金产业链",
+        "nodes": {
+            "manganese": {"name": "锰矿", "commodities": []},
+            "silicon": {"name": "硅石", "commodities": []},
+            "ferromanganese": {"name": "锰硅", "commodities": ["SM"]},
+            "ferrosilicon": {"name": "硅铁", "commodities": ["SF"]},
+            "steelmaking": {"name": "炼钢", "commodities": []},
+        },
+        "edges": [
+            {"from": "manganese", "to": "ferromanganese", "relation": "原料"},
+            {"from": "silicon", "to": "ferrosilicon", "relation": "原料"},
+            {"from": "ferromanganese", "to": "steelmaking", "relation": "炼钢辅料"},
+            {"from": "ferrosilicon", "to": "steelmaking", "relation": "炼钢辅料"},
+        ],
+    },
 }
 
 

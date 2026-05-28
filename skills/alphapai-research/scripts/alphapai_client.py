@@ -36,15 +36,25 @@ DEFAULT_CONFIG_PATH = os.path.join(
 
 
 def load_config(config_path: str = DEFAULT_CONFIG_PATH) -> Optional[Dict]:
-    """加载API配置，返回 {"api_key": "...", "base_url": "..."} 或 None"""
-    if not os.path.exists(config_path):
-        return None
-    with open(config_path, "r", encoding="utf-8") as f:
-        config = json.load(f)
-    if not config.get("api_key"):
-        return None
-    config.setdefault("base_url", "https://open-api.rabyte.cn")
-    return config
+    """加载API配置，返回 {"api_key": "...", "base_url": "..."} 或 None
+    支持从 config.json 或环境变量 ALPHAPAI_API_KEY 读取
+    """
+    config = None
+    if os.path.exists(config_path):
+        with open(config_path, "r", encoding="utf-8") as f:
+            config = json.load(f)
+    
+    # 优先使用 config.json 中的配置
+    if config and config.get("api_key"):
+        config.setdefault("base_url", "https://open-api.rabyte.cn")
+        return config
+    
+    # 回退到环境变量
+    env_key = os.environ.get("ALPHAPAI_API_KEY")
+    if env_key:
+        return {"api_key": env_key, "base_url": "https://open-api.rabyte.cn"}
+    
+    return None
 
 
 def save_config(

@@ -13,16 +13,19 @@ from data.collectors.market_data import MarketDataCollector, MarketSnapshot
 from data.collectors.alpha_pai import AlphaPaiCollector
 from research.llm_integration import LLMClient, extract_json_from_text
 from intraday.models import IntradaySignal, Direction, MarketSnapshotData, CONTRACT_SIZE
+from intraday.evolution import get_evolved_system_prompt, get_current_confidence_threshold, get_cognition_prompt_additions
 
 logger = logging.getLogger(__name__)
 
 # 品种最小变动价位对应的每手价值（简化）
 TICK_VALUE = {
+    "A": 10,
     "AG": 15,
     "AL": 25,
     "AO": 20,
     "AP": 10,
     "AU": 1000,
+    "B": 10,
     "BC": 50,
     "BR": 25,
     "BU": 10,
@@ -31,11 +34,17 @@ TICK_VALUE = {
     "CJ": 5,
     "CS": 10,
     "CU": 50,
+    "CY": 25,
     "EB": 5,
     "EG": 10,
     "FG": 20,
+    "FU": 10,
     "HC": 10,
     "I": 50,
+    "IC": 40,
+    "IF": 60,
+    "IH": 60,
+    "IM": 40,
     "J": 50,
     "JD": 10,
     "JM": 30,
@@ -57,6 +66,7 @@ TICK_VALUE = {
     "PX": 5,
     "RB": 10,
     "RM": 10,
+    "RR": 10,
     "RU": 50,
     "SA": 20,
     "SC": 100,
@@ -68,7 +78,9 @@ TICK_VALUE = {
     "SP": 10,
     "SR": 10,
     "SS": 25,
+    "T": 50,
     "TA": 5,
+    "TL": 100,
     "UR": 20,
     "V": 5,
     "Y": 10,
@@ -162,14 +174,45 @@ class IntradayStrategy:
     async def _fetch_related_market(self, name: str, code: str) -> str:
         """获取关联市场/外盘信息"""
         queries = {
+            # 黑色系
             "RB": "新加坡铁矿石 隔夜 涨跌幅",
             "I": "新加坡铁矿石 隔夜 涨跌幅",
+            "J": "焦煤焦炭 黑色系 隔夜 涨跌幅",
+            "JM": "焦煤 现货 港口 隔夜 涨跌幅",
+            "HC": "热轧卷板 钢铁 隔夜 涨跌幅",
+            # 有色
             "CU": "LME铜 隔夜 涨跌幅",
+            "AL": "LME铝 隔夜 涨跌幅",
+            "ZN": "LME锌 隔夜 涨跌幅",
+            "NI": "LME镍 隔夜 涨跌幅",
+            "SN": "LME锡 隔夜 涨跌幅",
+            "PB": "LME铅 隔夜 涨跌幅",
+            # 贵金属
+            "AU": "国际金价 黄金 隔夜 涨跌幅",
+            "AG": "国际银价 白银 隔夜 涨跌幅",
+            # 能化
+            "SC": "布伦特原油 WTI 隔夜 涨跌幅",
+            "BU": "沥青 原油 隔夜 涨跌幅",
+            "RU": "橡胶 日胶 隔夜 涨跌幅",
+            "FU": "燃料油 新加坡 隔夜 涨跌幅",
+            # 农产品
             "M": "CBOT大豆 美豆 隔夜 涨跌幅",
             "C": "CBOT玉米 隔夜 涨跌幅",
-            "SC": "布伦特原油 WTI 隔夜 涨跌幅",
-            "AL": "LME铝 隔夜 涨跌幅",
-            "AU": "国际金价 黄金 隔夜 涨跌幅",
+            "A": "CBOT大豆 美豆 隔夜 涨跌幅",
+            "B": "CBOT大豆 美豆 隔夜 涨跌幅",
+            "P": "马棕榈油 BMD 隔夜 涨跌幅",
+            "Y": "CBOT豆油 隔夜 涨跌幅",
+            "CF": "ICE棉花 美棉 隔夜 涨跌幅",
+            "SR": "ICE原糖 纽约糖 隔夜 涨跌幅",
+            "OI": "ICE油菜籽 加菜籽 隔夜 涨跌幅",
+            "RM": "ICE油菜籽 加菜籽 隔夜 涨跌幅",
+            # 金融期货
+            "IF": "A50 富时中国 隔夜 涨跌幅",
+            "IC": "A50 富时中国 中证500 隔夜",
+            "IH": "A50 富时中国 上证50 隔夜",
+            "IM": "A50 富时中国 中证1000 隔夜",
+            "T": "美国十年期国债 收益率 隔夜 涨跌幅",
+            "TL": "美国长端国债 30年期 收益率 隔夜 涨跌幅",
         }
         
         query = queries.get(code)
@@ -190,14 +233,43 @@ class IntradayStrategy:
         """通过 Alpha 派 recall 获取品种基本面数据"""
         try:
             keywords_map = {
+                # 黑色系
                 "RB": ["螺纹钢", "钢铁", "库存", "供需"],
                 "I": ["铁矿石", "进口矿", "矿山"],
+                "J": ["焦炭", "焦化", "焦炉"],
+                "JM": ["焦煤", "煤炭进口", "洗煤"],
+                "HC": ["热轧卷板", "板材", "汽车"],
+                # 有色
                 "CU": ["铜", "铜矿", "冶炼", "LME铜"],
+                "AL": ["铝", "电解铝", "氧化铝"],
+                "ZN": ["锌", "精锌", "镀锌"],
+                "NI": ["镍", "镍矿", "不锈钢"],
+                "SN": ["锡", "锡锭"],
+                "PB": ["铅", "再生铅", "铅精矿"],
+                # 贵金属
+                "AU": ["黄金", "美联储", "实际利率"],
+                "AG": ["白银", "金银比", "光伏"],
+                # 能化
+                "SC": ["原油", "OPEC", "原油库存"],
+                "FU": ["燃料油", "船用燃料", "炼化"],
+                "RU": ["天然橡胶", "RSS", "轮胎"],
+                "TA": ["PTA", "聚酯", "PX"],
+                "MA": ["甲醇", "煤制甲醇", "烯烃"],
+                # 农产品
                 "M": ["豆粕", "大豆", "压榨", "库存"],
                 "C": ["玉米", "临储", "饲用"],
-                "SC": ["原油", "OPEC", "原油库存"],
-                "AL": ["铝", "电解铝", "氧化铝"],
-                "AU": ["黄金", "美联储", "实际利率"],
+                "A": ["豆一", "国产大豆", "收储"],
+                "P": ["棕榈油", "马盘", "BMD"],
+                "SR": ["白糖", "原糖", "甘蔗"],
+                "CF": ["棉花", "纺服", "出口"],
+                "LH": ["生猪", "能繁母猪", "猪周期"],
+                # 金融期货
+                "IF": ["沪深300", "A股市场", "股指"],
+                "IC": ["中证500", "中小盘", "股指"],
+                "IH": ["上证50", "大盘蓝筹", "股指"],
+                "IM": ["中证1000", "小盘股", "股指"],
+                "T": ["国债期货", "十年期国债", "利率"],
+                "TL": ["超长债", "三十年期", "国债收益率"],
             }
             keywords = keywords_map.get(code, [name])
             
@@ -226,15 +298,19 @@ class IntradayStrategy:
         related_market: str,
         alpha_pai_data: str = "",
     ) -> IntradaySignal:
-        """LLM 综合判断日内方向"""
+        """LLM 综合判断日内方向（支持认知库经验融入）"""
         
         date_str = datetime.now().strftime("%Y-%m-%d")
         tick_value = TICK_VALUE.get(commodity, 10)
         
-        system_prompt = """你是一个只做日内T+0的期货交易员，交易时间严格限制在日盘 09:00-15:00。
+        base_prompt = """你是一个只做日内T+0的期货交易员，交易时间严格限制在日盘 09:00-15:00。
 每天只做1-2笔高确定性交易，14:55前必须平仓，不持仓过夜，不交易夜盘。
 你的风格是：客观、冷静、只看高确定性机会，没有把握就观望。
 输出必须是 JSON 格式。"""
+        
+        # 融入认知库经验规则
+        cognition_additions = get_cognition_prompt_additions()
+        system_prompt = get_evolved_system_prompt(base_prompt, cognition_additions)
         
         # 量仓变化提示（只有当前快照，无历史对比，引导 LLM 做定性判断）
         oi_hint = "增仓" if snapshot.open_interest > 0 else "持仓数据缺失"
@@ -297,6 +373,7 @@ class IntradayStrategy:
 - 隔夜重大利空/利多+跳空确认 = 高确定性顺势交易
 - 开盘价与日内实时价背离时，以实时价方向为准
 - 没有明确催化剂时，建议观望
+- 特别注意【系统进化经验规则】中的历史教训，避免重复错误
 """
         
         llm = await self._get_llm()
@@ -349,12 +426,17 @@ class IntradayStrategy:
     async def scan_all(
         self,
         commodities: List[Dict[str, str]],
-        min_confidence: int = 7,
+        min_confidence: int = None,
     ) -> List[IntradaySignal]:
         """
-        扫描所有品种，返回高置信度信号
+        扫描所有品种，返回高置信度信号（支持动态阈值调整）
         commodities: [{"code": "RB", "name": "螺纹钢"}, ...]
         """
+        # 动态调整置信度阈值
+        if min_confidence is None:
+            min_confidence = get_current_confidence_threshold(default=7)
+            logger.info(f"使用动态置信度阈值: {min_confidence}")
+        
         signals = []
         for comm in commodities:
             try:
@@ -364,7 +446,7 @@ class IntradayStrategy:
                 logger.error(f"扫描失败 {comm['code']}: {e}")
         
         # 过滤 + 排序
-        valid = [s for s in signals if s.should_trade()]
+        valid = [s for s in signals if s.should_trade(min_confidence=min_confidence)]
         valid.sort(key=lambda x: x.confidence, reverse=True)
         
         # 最多返回前3个

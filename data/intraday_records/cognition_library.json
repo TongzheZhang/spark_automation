@@ -1,0 +1,67 @@
+{
+  "version": 1,
+  "updated_at": "2026-05-26T18:16:13.437762",
+  "items": [
+    {
+      "id": "COG-20260526-03",
+      "lesson": "明确止损点位，建议设置在日内高点上方，以控制潜在风险",
+      "category": "risk_control",
+      "confidence": 9,
+      "verification_count": 1,
+      "win_count": 1,
+      "loss_count": 0,
+      "affected_commodities": [
+        "RB"
+      ],
+      "source_trade_date": "2026-05-26",
+      "created_at": "2026-05-26T18:16:13.437094",
+      "status": "pending"
+    },
+    {
+      "id": "COG-20260526-01",
+      "lesson": "开盘后等待价格反弹至关键阻力位再入场，可优化风险收益比",
+      "category": "entry_timing",
+      "confidence": 8,
+      "verification_count": 1,
+      "win_count": 1,
+      "loss_count": 0,
+      "affected_commodities": [
+        "RB"
+      ],
+      "source_trade_date": "2026-05-26",
+      "created_at": "2026-05-26T18:16:13.437055",
+      "status": "pending"
+    },
+    {
+      "id": "COG-20260526-02",
+      "lesson": "在价格接近日内低点时部分平仓，可锁定更多利润",
+      "category": "exit_timing",
+      "confidence": 7,
+      "verification_count": 1,
+      "win_count": 1,
+      "loss_count": 0,
+      "affected_commodities": [
+        "RB"
+      ],
+      "source_trade_date": "2026-05-26",
+      "created_at": "2026-05-26T18:16:13.437088",
+      "status": "pending"
+    },
+    {
+      "id": "COG-20260526-04",
+      "lesson": "价跌+持仓增+成交放可作为空头开仓的同步信号，但需验证盘口数据",
+      "category": "signal_filter",
+      "confidence": 7,
+      "verification_count": 1,
+      "win_count": 1,
+      "loss_count": 0,
+      "affected_commodities": [
+        "RB"
+      ],
+      "source_trade_date": "2026-05-26",
+      "created_at": "2026-05-26T18:16:13.437098",
+      "status": "pending"
+    }
+  ],
+  "evolved_prompt_additions": "\n【系统进化经验规则（基于历史复盘自动积累）】\n1. ⏳ [risk_control] 明确止损点位，建议设置在日内高点上方，以控制潜在风险 (可靠度:9/10,验证:1次)\n2. ⏳ [entry_timing] 开盘后等待价格反弹至关键阻力位再入场，可优化风险收益比 (可靠度:8/10,验证:1次)\n3. ⏳ [exit_timing] 在价格接近日内低点时部分平仓，可锁定更多利润 (可靠度:7/10,验证:1次)\n4. ⏳ [signal_filter] 价跌+持仓增+成交放可作为空头开仓的同步信号，但需验证盘口数据 (可靠度:7/10,验证:1次)"
+}

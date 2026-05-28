@@ -25,11 +25,13 @@ class TradeStatus(str, Enum):
 
 # 品种每手合约乘数（吨/手），用于盈亏计算
 CONTRACT_SIZE: Dict[str, int] = {
+    "A": 10,
     "AG": 15,
     "AL": 5,
     "AO": 20,
     "AP": 10,
     "AU": 1000,
+    "B": 10,
     "BC": 5,
     "BR": 5,
     "BU": 10,
@@ -38,11 +40,17 @@ CONTRACT_SIZE: Dict[str, int] = {
     "CJ": 5,
     "CS": 10,
     "CU": 5,
+    "CY": 5,
     "EB": 5,
     "EG": 10,
     "FG": 20,
+    "FU": 10,
     "HC": 10,
     "I": 100,
+    "IC": 200,
+    "IF": 300,
+    "IH": 300,
+    "IM": 200,
     "J": 100,
     "JD": 10,
     "JM": 60,
@@ -64,6 +72,7 @@ CONTRACT_SIZE: Dict[str, int] = {
     "PX": 5,
     "RB": 10,
     "RM": 10,
+    "RR": 10,
     "RU": 10,
     "SA": 20,
     "SC": 1000,
@@ -75,7 +84,9 @@ CONTRACT_SIZE: Dict[str, int] = {
     "SP": 10,
     "SR": 10,
     "SS": 5,
+    "T": 10000,
     "TA": 5,
+    "TL": 10000,
     "UR": 20,
     "V": 5,
     "Y": 10,
@@ -124,8 +135,8 @@ class IntradaySignal(BaseModel):
     generated_at: datetime = Field(default_factory=datetime.now)
     
     # 是否建议交易
-    def should_trade(self) -> bool:
-        return self.direction != Direction.NO_TRADE and self.confidence >= 7
+    def should_trade(self, min_confidence: int = 7) -> bool:
+        return self.direction != Direction.NO_TRADE and self.confidence >= min_confidence
 
 
 class IntradayTrade(BaseModel):
@@ -186,6 +197,80 @@ class IntradayTrade(BaseModel):
         return self.pnl
 
 
+class CognitionItem(BaseModel):
+    """认知条目 — 从复盘中提取的教训"""
+    
+    id: str = Field(..., description="唯一ID")
+    lesson: str = Field(..., description="核心教训")
+    category: str = Field(..., description="类别: signal_filter / entry_timing / exit_timing / risk_control / market_regime / general")
+    confidence: int = Field(default=5, ge=0, le=10, description="可靠度 0-10")
+    verification_count: int = Field(default=0, description="验证次数")
+    win_count: int = Field(default=0, description="验证中胜场")
+    loss_count: int = Field(default=0, description="验证中败场")
+    affected_commodities: List[str] = Field(default_factory=list)
+    source_trade_date: str = Field(default="", description="来源交易日期")
+    created_at: datetime = Field(default_factory=datetime.now)
+    status: str = Field(default="pending", description="pending / validated / invalidated")
+    
+    def record_verification(self, is_win: bool):
+        """记录一次验证结果"""
+        self.verification_count += 1
+        if is_win:
+            self.win_count += 1
+        else:
+            self.loss_count += 1
+        
+        # 更新可靠度
+        if self.verification_count >= 3:
+            win_rate = self.win_count / self.verification_count
+            if win_rate >= 0.6:
+                self.status = "validated"
+                self.confidence = min(10, self.confidence + 1)
+            elif win_rate <= 0.3 and self.verification_count >= 5:
+                self.status = "invalidated"
+                self.confidence = max(0, self.confidence - 2)
+    
+    def to_prompt_rule(self) -> str:
+        """转换为 prompt 经验规则格式"""
+        status_emoji = {"pending": "⏳", "validated": "✅", "invalidated": "❌"}.get(self.status, "⏳")
+        return f"{status_emoji} [{self.category}] {self.lesson} (可靠度:{self.confidence}/10,验证:{self.verification_count}次)"
+
+
+class CognitionLibrary(BaseModel):
+    """认知库 — 所有 lessons 的集合"""
+    
+    version: int = Field(default=1)
+    updated_at: datetime = Field(default_factory=datetime.now)
+    items: List[CognitionItem] = Field(default_factory=list)
+    evolved_prompt_additions: str = Field(default="", description="累积追加到 strategy prompt 的经验规则文本")
+    
+    def get_validated_items(self, min_confidence: int = 7) -> List[CognitionItem]:
+        """获取已验证的高可靠度条目"""
+        return [
+            item for item in self.items
+            if item.confidence >= min_confidence and item.status in ["pending", "validated"]
+        ]
+    
+    def get_items_by_category(self, category: str) -> List[CognitionItem]:
+        """按类别获取条目"""
+        return [item for item in self.items if item.category == category]
+    
+    def rebuild_prompt_additions(self, max_length: int = 2000) -> str:
+        """重新构建 prompt 追加文本"""
+        validated = self.get_validated_items()
+        if not validated:
+            return ""
+        
+        lines = ["\n【系统进化经验规则（基于历史复盘自动积累）】"]
+        for i, item in enumerate(validated, 1):
+            lines.append(f"{i}. {item.to_prompt_rule()}")
+        
+        text = "\n".join(lines)
+        if len(text) > max_length:
+            text = text[:max_length] + "\n...（规则过多，已截断）"
+        return text
+
+
 class DailyReview(BaseModel):
     """每日复盘"""
     
@@ -206,6 +291,10 @@ class DailyReview(BaseModel):
     review_summary: str = ""
     lessons: List[str] = Field(default_factory=list)
     strategy_adjustments: List[str] = Field(default_factory=list)
+    
+    # 进化相关
+    extracted_cognitions: List[CognitionItem] = Field(default_factory=list)
+    evolution_report: str = ""
     
     generated_at: datetime = Field(default_factory=datetime.now)
     

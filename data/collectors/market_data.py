@@ -15,13 +15,18 @@ import requests
 
 logger = logging.getLogger(__name__)
 
+# CFFEX（金融期货）品种列表（字段布局与商品期货不同）
+CFFEX_CODES = {"IF", "IC", "IH", "IM", "T", "TL"}
+
 # 品种代码映射: 系统代码 -> 新浪 nf_ 代码
 SINA_CODE_MAP = {
+    "A": "nf_A0",
     "AG": "nf_AG0",
     "AL": "nf_AL0",
     "AO": "nf_AO0",
     "AP": "nf_AP0",
     "AU": "nf_AU0",
+    "B": "nf_B0",
     "BC": "nf_BC0",
     "BR": "nf_BR0",
     "BU": "nf_BU0",
@@ -30,11 +35,17 @@ SINA_CODE_MAP = {
     "CJ": "nf_CJ0",
     "CS": "nf_CS0",
     "CU": "nf_CU0",
+    "CY": "nf_CY0",
     "EB": "nf_EB0",
     "EG": "nf_EG0",
     "FG": "nf_FG0",
+    "FU": "nf_FU0",
     "HC": "nf_HC0",
     "I": "nf_I0",
+    "IC": "nf_IC0",
+    "IF": "nf_IF0",
+    "IH": "nf_IH0",
+    "IM": "nf_IM0",
     "J": "nf_J0",
     "JD": "nf_JD0",
     "JM": "nf_JM0",
@@ -56,6 +67,7 @@ SINA_CODE_MAP = {
     "PX": "nf_PX0",
     "RB": "nf_RB0",
     "RM": "nf_RM0",
+    "RR": "nf_RR0",
     "RU": "nf_RU0",
     "SA": "nf_SA0",
     "SC": "nf_SC0",
@@ -67,7 +79,9 @@ SINA_CODE_MAP = {
     "SP": "nf_SP0",
     "SR": "nf_SR0",
     "SS": "nf_SS0",
+    "T": "nf_T0",
     "TA": "nf_TA0",
+    "TL": "nf_TL0",
     "UR": "nf_UR0",
     "V": "nf_V0",
     "Y": "nf_Y0",
@@ -143,7 +157,7 @@ class MarketDataCollector:
     def _parse(self, commodity: str, raw: str) -> Optional[MarketSnapshot]:
         """解析新浪行情字符串
         
-        新浪 nf_ 前缀期货行情字段布局 (实际测试验证):
+        商品期货 nf_ 前缀字段布局:
             0: 品种名称
             1: 时间 (HHMMSS)
             2: 开盘价
@@ -163,6 +177,19 @@ class MarketDataCollector:
             16: 品种名称(短)
             17: 日期 YYYY-MM-DD
             18+: 扩展字段
+        
+        CFFEX 金融期货 nf_ 前缀字段布局:
+            0: 开盘价
+            1: 最高价
+            2: 最低价
+            3: 最新价
+            4: 成交量
+            5: 成交额
+            6: 持仓量
+            7: 昨结
+            36: 日期 YYYY-MM-DD
+            37: 时间 (HH:MM:SS)
+            49: 品种名称
         
         关键：昨结在 parts[10]，不是 parts[9]（结算价）。
         日内交易应基于昨结计算涨跌幅和跳空，而非收盘价或当日结算价。
@@ -189,6 +216,33 @@ class MarketDataCollector:
             except ValueError:
                 return 0.0
         
+        # CFFEX 金融期货专用解析
+        if commodity in CFFEX_CODES:
+            try:
+                # 金融期货时间格式为 "15:00:00"，统一为 "HHMMSS"
+                raw_time = parts[37].strip() if len(parts) > 37 else ""
+                time_str = raw_time.replace(":", "") if raw_time else "000000"
+                return MarketSnapshot(
+                    commodity=commodity,
+                    name=parts[49].strip() if len(parts) > 49 else commodity,
+                    time=time_str,
+                    open=_safe_float(parts[0]),
+                    high=_safe_float(parts[1]),
+                    low=_safe_float(parts[2]),
+                    last=_safe_float(parts[3]),
+                    prev_settle=_safe_float(parts[7]),   # 昨结
+                    settle=0.0,
+                    bid=0.0,
+                    ask=0.0,
+                    open_interest=_safe_float(parts[6]),
+                    volume=_safe_float(parts[4]),
+                    date=parts[36].strip() if len(parts) > 36 else "",
+                )
+            except (ValueError, IndexError) as e:
+                logger.error(f"CFFEX行情解析异常 {commodity}: {e}, raw={content[:200]}")
+                return None
+        
+        # 商品期货解析
         try:
             return MarketSnapshot(
                 commodity=commodity,

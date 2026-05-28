@@ -20,6 +20,7 @@ from research.llm_integration import LLMClient
 from data.collectors.alpha_pai import AlphaPaiCollector
 from intraday.record import load_signals, load_trades, save_review
 from intraday.models import DailyReview, TradeStatus
+from intraday.evolution import run_evolution
 
 logging.basicConfig(
     level=logging.INFO,
@@ -55,6 +56,12 @@ async def run_evening_review(date: str = None):
     
     # 保存复盘
     save_review(review)
+    
+    # 策略自我进化
+    try:
+        await run_evolution(review)
+    except Exception as e:
+        logger.error(f"策略进化失败: {e}")
     
     # 生成报告
     report_lines = [
@@ -165,6 +172,40 @@ async def _llm_review(trades, signals) -> str:
         return "复盘分析生成失败。"
     finally:
         await client.close()
+
+
+async def _alpha_pai_expert_review(trades) -> str:
+    """Alpha 派投研顾问：作为专家讨论当日交易优化点"""
+    
+    # 构建讨论主题
+    topics = []
+    for t in trades:
+        topics.append(
+            f"品种{t.commodity}，方向{t.direction.value}，"
+            f"开盘判断逻辑：{t.core_logic}，"
+            f"实际走势：最高{t.day_high} 最低{t.day_low} 收盘{t.day_close}，"
+            f"结果：{t.status.value}，盈亏{t.pnl}"
+        )
+    
+    discussion_topic = "\n".join(topics)
+    
+    # 使用 Alpha 派 expert_discuss（智能问答模式）
+    collector = AlphaPaiCollector()
+    try:
+        import asyncio
+        loop = asyncio.get_event_loop()
+        answer = await loop.run_in_executor(
+            None,
+            collector.expert_discuss,
+            f"作为期货投研专家，请对以下日内T+0交易进行复盘讨论，指出优化点和改进建议：\n{discussion_topic}",
+            "",
+        )
+        return answer
+    except Exception as e:
+        logger.error(f"Alpha 派专家讨论失败: {e}")
+        return ""
+    finally:
+        pass
 
 
 if __name__ == "__main__":

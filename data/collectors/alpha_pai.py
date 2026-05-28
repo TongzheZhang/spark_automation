@@ -10,6 +10,7 @@ import logging
 import subprocess
 from typing import Optional, List, Dict, Any
 from dataclasses import dataclass
+from datetime import datetime, timedelta
 
 # 添加 skill 脚本路径
 SKILL_SCRIPT = os.path.join(
@@ -41,10 +42,21 @@ class AlphaPaiCollector:
     """Alpha 派数据采集器"""
     
     def __init__(self, api_key: Optional[str] = None):
-        self.api_key = api_key
         self.script_path = SKILL_SCRIPT
         if not os.path.exists(self.script_path):
             raise FileNotFoundError(f"Alpha 派客户端脚本未找到: {self.script_path}")
+        
+        # 若未传入 api_key，显式读取 config.json
+        if api_key is None:
+            config_path = os.path.join(
+                os.path.dirname(os.path.dirname(self.script_path)), "config.json"
+            )
+            if os.path.exists(config_path):
+                with open(config_path, "r", encoding="utf-8") as f:
+                    config = json.load(f)
+                api_key = config.get("api_key")
+        
+        self.api_key = api_key
     
     def _run_cli(self, args: List[str], capture_json: bool = True) -> Dict[str, Any]:
         """运行 Alpha 派 CLI"""
@@ -54,11 +66,17 @@ class AlphaPaiCollector:
         
         logger.debug(f"运行 Alpha 派 CLI: {' '.join(cmd)}")
         
+        # 将 api_key 通过环境变量注入，确保子进程在任何环境下都能找到配置
+        env = os.environ.copy()
+        if self.api_key:
+            env["ALPHAPAI_API_KEY"] = self.api_key
+        
         result = subprocess.run(
             cmd,
             capture_output=True,
             text=True,
             encoding="utf-8",
+            env=env,
         )
         
         if result.returncode != 0:
@@ -78,7 +96,8 @@ class AlphaPaiCollector:
         """健康检查"""
         try:
             result = self._run_cli(["hello"], capture_json=False)
-            if "hello" in result.get("raw_output", "") or "success" in result.get("raw_output", ""):
+            output = result.get("raw_output", "")
+            if any(k in output for k in ("hello", "success", "连接正常", "正常")):
                 logger.info(f"Alpha 派健康检查通过")
                 return True
             logger.warning(f"Alpha 派健康检查异常: {result}")

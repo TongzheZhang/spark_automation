@@ -47,9 +47,11 @@ logs/
 .coverage
 htmlcov/
 
-# Environment
+# Environment & Secrets
 .env
 .env.local
+config/settings.yaml
+skills/alphapai-research/config.json
 
 # OS
 .DS_Store
